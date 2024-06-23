@@ -9,6 +9,7 @@ using UnityEngine.UIElements;
 using UnityEngine.Rendering.Universal;
 using Button = UnityEngine.UI.Button;
 using System.Collections;
+using UnityEngine.Timeline;
 //using CrossPlatformInput;
 
 public enum SpecialMove
@@ -41,6 +42,17 @@ public class Chessboard : MonoBehaviour
     [SerializeField] private GameObject[] Black_prefabs;
     //[SerializeField] private Material[] teamMaterials;
 
+    [Header("Sound")]
+    [SerializeField] public AudioSource game_start_sound;
+    [SerializeField] public AudioSource game_end_sound;
+    [SerializeField] public AudioSource piece_pick_sound;
+    [SerializeField] public AudioSource piece_drop_sound;
+    [SerializeField] public AudioSource castling_sound;
+    [SerializeField] public AudioSource promotion_sound;
+    [SerializeField] public AudioSource capture_sound;
+    [SerializeField] public AudioSource check_sound;
+
+
     // constants for amount of tiles on 8x8 chessboard
     private const int TILE_COUNT_X = 8;
     private const int TILE_COUNT_Y = 8;
@@ -71,6 +83,7 @@ public class Chessboard : MonoBehaviour
 
     private int missCounter = 0;
 
+    
 
 
     //private Camera overheadCamera;
@@ -79,6 +92,8 @@ public class Chessboard : MonoBehaviour
 
     private void Awake()
     {
+        game_start_sound.Play();
+
         isWhiteTurn = true;
         turnScreen.SetActive(true);
         turnScreen.transform.GetChild(0).gameObject.SetActive(true);
@@ -165,6 +180,7 @@ public class Chessboard : MonoBehaviour
                     // If there's a chess piece on the touched tile
                     if (chessPieces[hitPosition.x, hitPosition.y] != null)
                     {
+                        piece_pick_sound.Play();
                         Debug.Log("XX White: " + isWhiteTurn);
                         // If it is our turn
                         if ((chessPieces[hitPosition.x, hitPosition.y].team == 0 && isWhiteTurn) || (chessPieces[hitPosition.x, hitPosition.y].team == 1 && !isWhiteTurn))
@@ -190,6 +206,7 @@ public class Chessboard : MonoBehaviour
                 //if (currentlyDragging != null && Input.GetMouseButtonUp(0))
                 if (currentlyDragging != null)
                 {
+                    piece_drop_sound.Play();
                     if (Physics.Raycast(ray, out info, 100, LayerMask.GetMask("Tile", "Hover", "Highlight", "Kill", "SpecialMove")))
                     {
                         Vector2Int hitPosition = LookUpTileIndex(info.transform.gameObject);
@@ -199,6 +216,14 @@ public class Chessboard : MonoBehaviour
                         if (!validMove)
                         {
                             currentlyDragging.SetPosition(GetTileCenter(previousPos.x, previousPos.y), false);
+                            missCounter++;
+                        }
+                     
+                        if (missCounter > 2)
+                        {
+                            displaySpecialMove.SetActive(true);
+                            displaySpecialMove_Text.text = "Drag your finger directly on top of a highlighted tile to move the piece!";
+                            missCounter = 0;
                         }
                         currentlyDragging = null;
                         RemoveHighlightTiles();
@@ -307,6 +332,8 @@ public class Chessboard : MonoBehaviour
             // if moved over enemy piece
             if (otherChessPiece.team == 0)
             {
+                capture_sound.Play();
+
                 if (otherChessPiece.type == ChessPieceType.King)
                 {
                     turnScreen.SetActive(false);
@@ -325,6 +352,8 @@ public class Chessboard : MonoBehaviour
             }
             else
             {
+                capture_sound.Play();
+
                 if (otherChessPiece.type == ChessPieceType.King)
                 {
                     turnScreen.SetActive(false);
@@ -400,6 +429,8 @@ public class Chessboard : MonoBehaviour
             {
                 if (myPawn.currentY == enemyPawn.currentY - 1 || myPawn.currentY == enemyPawn.currentY + 1)
                 {
+                    capture_sound.Play();
+
                     if (enemyPawn.team == 0)
                     {
                         displaySpecialMove_Text.text = "b: EnPassant by " + GenerateTileName(myPawn.currentX, myPawn.currentY) + " for " + GenerateTileName(enemyPawn.currentX, enemyPawn.currentY);
@@ -409,10 +440,13 @@ public class Chessboard : MonoBehaviour
                             new Vector3(8 * tileSize, yOffset, -1 * tileSize)
                             - bounds
                             + new Vector3(tileSize / 2, 0, tileSize / 2)
+                            + transform.position
                             + (Vector3.forward * deathSpacing) * deadWhites.Count);
                     }
                     else
                     {
+                        capture_sound.Play();
+
                         displaySpecialMove_Text.text = "w: EnPassant by " + GenerateTileName(myPawn.currentX, myPawn.currentY) + " for " + GenerateTileName(enemyPawn.currentX, enemyPawn.currentY);
                         deadBlacks.Add(enemyPawn);
                         enemyPawn.SetScale(Vector3.one * deathSize);
@@ -420,6 +454,7 @@ public class Chessboard : MonoBehaviour
                             new Vector3(-1 * tileSize, yOffset, 8 * tileSize)
                             - bounds //to set center of board
                             + new Vector3(tileSize / 2, 0, tileSize / 2) //center of square
+                            + transform.position
                             + (Vector3.back * deathSpacing) * deadBlacks.Count); //direction where it goes
                     }
                     chessPieces[enemyPawn.currentX, enemyPawn.currentY] = null;
@@ -435,6 +470,7 @@ public class Chessboard : MonoBehaviour
             // left rook
             if (lastMove[1].x == 2)
             {
+                castling_sound.Play();
                 // white side
                 if (lastMove[1].y == 0)
                 {
@@ -456,6 +492,7 @@ public class Chessboard : MonoBehaviour
             }
             else if (lastMove[1].x == 6)
             {
+                castling_sound.Play();
                 // white side
                 if (lastMove[1].y == 0)
                 {
@@ -487,6 +524,7 @@ public class Chessboard : MonoBehaviour
             {
                 if (targetPawn.team == 0 && lastMove[1].y == 7)
                 {
+                    promotion_sound.Play();
                     displaySpecialMove_Text.text = "w: " + GenerateTileName(targetPawn.currentX, targetPawn.currentY) + " promoted to Queen";
 
                     ChessPiece newQueen = SpawnSingleWhitePiece(ChessPieceType.Queen, 0);
@@ -497,6 +535,7 @@ public class Chessboard : MonoBehaviour
                 }
                 if (targetPawn.team == 1 && lastMove[1].y == 0)
                 {
+                    promotion_sound.Play();
                     displaySpecialMove_Text.text = "b: " + GenerateTileName(targetPawn.currentX, targetPawn.currentY) + " promoted to Queen";
 
                     ChessPiece newQueen = SpawnSingleBlackPiece(ChessPieceType.Queen, 1);
@@ -594,6 +633,7 @@ public class Chessboard : MonoBehaviour
         {
             displaySpecialMove.SetActive(true);
             displaySpecialMove_Text.text = "Check prevention active";
+            check_sound.Play();
         }
 
         // Remove check moves from current available move list
@@ -826,6 +866,7 @@ public class Chessboard : MonoBehaviour
 
     private void CheckMate(int team)
     {
+        game_end_sound.Play();
         DisplayVictory(team);
     }
 
@@ -838,6 +879,8 @@ public class Chessboard : MonoBehaviour
 
     public void onResetButton()
     {
+        game_start_sound.Play();
+
         victoryScreen.transform.GetChild(0).gameObject.SetActive(false);
         victoryScreen.transform.GetChild(1).gameObject.SetActive(false);
         victoryScreen.transform.GetChild(2).gameObject.SetActive(false);
