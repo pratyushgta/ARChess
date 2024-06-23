@@ -4,6 +4,11 @@ using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+//using static UnityEngine.InputSystem.HID.HID;
+using UnityEngine.UIElements;
+using UnityEngine.Rendering.Universal;
+using Button = UnityEngine.UI.Button;
+using System.Collections;
 //using CrossPlatformInput;
 
 public enum SpecialMove
@@ -21,6 +26,7 @@ public class Chessboard : MonoBehaviour
     [SerializeField] private Material tileMaterial; //initialize material to render tiles
     [SerializeField] private float tileSize = 1.0f;
     [SerializeField] private float yOffset = 0.2f;
+    [SerializeField] private float yOffsetX = 0.2f;
     [SerializeField] private Vector3 boardCenter = Vector3.zero;
     [SerializeField] private float deathSize = 0.6f;
     [SerializeField] private float deathSpacing = 0.8f;
@@ -58,18 +64,56 @@ public class Chessboard : MonoBehaviour
     private SpecialMove specialMove;
     private List<Vector2Int[]> moveList = new List<Vector2Int[]>();
 
+    private GameObject displaySpecialMove;
+    private GameObject displayMove;
+    private TextMeshProUGUI displaySpecialMove_Text;
+    private TextMeshProUGUI displayMove_Text;
+
+    private int missCounter = 0;
+
+
+
+    //private Camera overheadCamera;
+
+
+
     private void Awake()
     {
         isWhiteTurn = true;
         turnScreen.SetActive(true);
         turnScreen.transform.GetChild(0).gameObject.SetActive(true);
 
+        displaySpecialMove = turnScreen.transform.GetChild(2).gameObject;
+        displayMove = turnScreen.transform.GetChild(3).gameObject;
+
+        displaySpecialMove_Text = displaySpecialMove.GetComponent<TextMeshProUGUI>();
+        displayMove_Text = displayMove.GetComponent<TextMeshProUGUI>();
+
+        displayMove.SetActive(true);
+        displayMove_Text.text = " ";
+
         // begin board generation
         GenerateAllTiles(tileSize, TILE_COUNT_X, TILE_COUNT_Y);
-        //SpawnSingleWhitePiece(ChessPieceType.King, 0);
         SpawnAllPieces();
         PositionAllPieces();
+
+        //currentCamera = Camera.main;
+        //CreateOverheadCamera();
     }
+
+
+    // Camera directly on top of spawned chessboard to throw raycast for better piece moving accuracy
+    /*private void CreateOverheadCamera()
+    {
+        GameObject cameraObject = new GameObject("OverheadCamera");
+        overheadCamera = cameraObject.AddComponent<Camera>();
+        overheadCamera.orthographic = true;
+        overheadCamera.orthographicSize = (TILE_COUNT_X * tileSize) / 2;
+        overheadCamera.transform.position = new Vector3(transform.position.x, 20f, transform.position.z);
+        overheadCamera.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+        overheadCamera.enabled = false; 
+    }*/
+
 
     private void Update()
     {
@@ -78,30 +122,28 @@ public class Chessboard : MonoBehaviour
             currentCamera = Camera.main;
             return;
         }
+        /*if (!overheadCamera)
+        {
+            CreateOverheadCamera();
+            return;
+        }*/
+
 
         // handle mouse hover / check if there's at least one touch
         if (Input.touchCount > 0)
         {
             Touch touch = Input.touches[0];
             Vector2 touchPosition = touch.position;
-            //touchPosition.x /= Screen.width;
-            //touchPosition.y /= Screen.height;
-            //!!!!!Debug.Log($"Touch detected: {touch.phase} at position {touchPosition}");
             RaycastHit info;
-            //Ray ray = currentCamera.ScreenPointToRay(Input.mousePosition); // cast a ray from the camera to the mouse position to detect which tile is hovered
-            Ray ray = currentCamera.ScreenPointToRay(touchPosition); // Cast a ray from the camera to the touch position to detect which tile is hovered
-            Debug.DrawRay(ray.origin, ray.direction * 100, Color.red); // visualize the ray in the scene
-            //!!!!Debug.Log($"Ray origin: {ray.origin}, direction: {ray.direction}");
+            //Ray ray = currentCamera.ScreenPointToRay(Input.mousePosition); // WINDOWS cast a ray from the camera to the mouse position to detect which tile is hovered
+            Ray ray = currentCamera.ScreenPointToRay(touchPosition); // ANDROID Cast a ray from the camera to the touch position to detect which tile is hovered
+            //Ray ray = overheadCamera.ScreenPointToRay(touchPosition); // ANDROID Cast a ray from the overhead camera to the touch position to detect which tile is hovered
 
             // Handle touch begin phase
             if (touch.phase == TouchPhase.Began)
             {
-                //!!!!Debug.Log("Touch phase began");
-                //!!!!Debug.Log($"LayerMask: {tileLayerMask.value}");
-
-                if (Physics.Raycast(ray, out info, 100, LayerMask.GetMask("Tile", "Hover", "Highlight", "Kill")))
+                if (Physics.Raycast(ray, out info, 100, LayerMask.GetMask("Tile", "Hover", "Highlight", "Kill", "SpecialMove")))
                 {
-                    //!!!!Debug.Log($"Raycast hit: {info.transform.gameObject.name}");
                     // Get indexes of tile that have been hit
                     Vector2Int hitPosition = LookUpTileIndex(info.transform.gameObject);
 
@@ -123,6 +165,7 @@ public class Chessboard : MonoBehaviour
                     // If there's a chess piece on the touched tile
                     if (chessPieces[hitPosition.x, hitPosition.y] != null)
                     {
+                        Debug.Log("XX White: " + isWhiteTurn);
                         // If it is our turn
                         if ((chessPieces[hitPosition.x, hitPosition.y].team == 0 && isWhiteTurn) || (chessPieces[hitPosition.x, hitPosition.y].team == 1 && !isWhiteTurn))
                         {
@@ -139,25 +182,15 @@ public class Chessboard : MonoBehaviour
                         }
                     }
                 }
-                else
-                {
-                    //!!!!Debug.Log("XXXXX Raycast did not hit any objects XXXXX");
-                    //!!!!Debug.Log($"Ray origin: {ray.origin}, direction: {ray.direction}");
-                    //!!!!Debug.DrawRay(ray.origin, ray.direction * 100, Color.red); // visualize the ray in the scene
-
-
-                }
             }
 
             // If we are releasing mouse button / Handle touch end phase
             if (touch.phase == TouchPhase.Ended)
             {
-                //!!!!Debug.Log("Touch phase ended");
-
                 //if (currentlyDragging != null && Input.GetMouseButtonUp(0))
                 if (currentlyDragging != null)
                 {
-                    if (Physics.Raycast(ray, out info, 100, LayerMask.GetMask("Tile", "Hover", "Highlight", "Kill")))
+                    if (Physics.Raycast(ray, out info, 100, LayerMask.GetMask("Tile", "Hover", "Highlight", "Kill", "SpecialMove")))
                     {
                         Vector2Int hitPosition = LookUpTileIndex(info.transform.gameObject);
                         Vector2Int previousPos = new Vector2Int(currentlyDragging.currentX, currentlyDragging.currentY);
@@ -167,15 +200,18 @@ public class Chessboard : MonoBehaviour
                         {
                             currentlyDragging.SetPosition(GetTileCenter(previousPos.x, previousPos.y), false);
                         }
-
-                        //!!!!Debug.Log($"Move valid: {validMove}");
-
                         currentlyDragging = null;
                         RemoveHighlightTiles();
                     }
-
                     else
                     {
+                        missCounter++;
+                        if (missCounter > 2)
+                        {
+                            displaySpecialMove.SetActive(true);
+                            displaySpecialMove_Text.text = "Drag your finger directly on top of a highlighted tile to move the piece!";
+                            missCounter = 0;
+                        }
                         currentlyDragging.SetPosition(GetTileCenter(currentlyDragging.currentX, currentlyDragging.currentY), false);
                         currentlyDragging = null;
                         RemoveHighlightTiles();
@@ -193,7 +229,7 @@ public class Chessboard : MonoBehaviour
             // Handle dragging phase
             if (currentlyDragging != null && (touch.phase == TouchPhase.Moved || touch.phase == TouchPhase.Stationary))
             {
-                Plane horizontalPlane = new Plane(Vector3.up, Vector3.up * yOffset);
+                Plane horizontalPlane = new Plane(Vector3.up, Vector3.up * yOffsetX);
                 float distance = 0.0f;
                 if (horizontalPlane.Raycast(ray, out distance))
                 {
@@ -201,6 +237,13 @@ public class Chessboard : MonoBehaviour
                 }
             }
         }
+        /*
+        if (!isWhiteTurn)
+        {
+            MakeBlackMove();
+            isWhiteTurn = true;
+        }
+        */
     }
 
 
@@ -213,7 +256,7 @@ public class Chessboard : MonoBehaviour
             if (chessPieces[availableMoves[i].x, availableMoves[i].y] != null && chessPieces[availableMoves[i].x, availableMoves[i].y].team != currentlyDragging.team)
                 tiles[availableMoves[i].x, availableMoves[i].y].layer = LayerMask.NameToLayer("Kill");
             else if (i == availableMoves.Count - 1 && specialMove == SpecialMove.EnPassant)
-                tiles[availableMoves[i].x, availableMoves[i].y].layer = LayerMask.NameToLayer("Kill");
+                tiles[availableMoves[i].x, availableMoves[i].y].layer = LayerMask.NameToLayer("SpecialMove");
             else
                 tiles[availableMoves[i].x, availableMoves[i].y].layer = LayerMask.NameToLayer("Highlight");
         }
@@ -245,6 +288,7 @@ public class Chessboard : MonoBehaviour
 
     private bool MoveTo(ChessPiece currentPiece, int x, int y)
     {
+        displaySpecialMove.SetActive(false);
         if (!ContainsValidMove(ref availableMoves, new Vector2Int(x, y)))
         {
             return false;
@@ -268,13 +312,15 @@ public class Chessboard : MonoBehaviour
                     turnScreen.SetActive(false);
                     CheckMate(1);
                 }
-
+                displaySpecialMove.SetActive(true);
+                displaySpecialMove_Text.text = "b: " + currentPiece.type + " " + GenerateTileName(previousPos.x, previousPos.y) + " captured " + " w: " + otherChessPiece.type + " " + GenerateTileName(otherChessPiece.currentX, otherChessPiece.currentY);
                 deadWhites.Add(otherChessPiece);
                 otherChessPiece.SetScale(Vector3.one * deathSize);
-                otherChessPiece.SetPosition(Vector3.up * 0.15f + // for increasing y position because of the raised board edges
+                otherChessPiece.SetPosition(Vector3.up * 0.015f + // for increasing y position because of the raised board edges
                     new Vector3(8 * tileSize, yOffset, -1 * tileSize)
                     - bounds //to set center of board
                     + new Vector3(tileSize / 2, 0, tileSize / 2) //center of square
+                    + transform.position 
                     + (Vector3.forward * deathSpacing) * deadWhites.Count); //direction where it goes
             }
             else
@@ -284,13 +330,15 @@ public class Chessboard : MonoBehaviour
                     turnScreen.SetActive(false);
                     CheckMate(0);
                 }
-
+                displaySpecialMove.SetActive(true);
+                displaySpecialMove_Text.text = "w: " + currentPiece.type + " " + GenerateTileName(previousPos.x, previousPos.y) + " captured " + " b: " + otherChessPiece.type + " " + GenerateTileName(otherChessPiece.currentX, otherChessPiece.currentY);
                 deadBlacks.Add(otherChessPiece);
                 otherChessPiece.SetScale(Vector3.one * deathSize);
-                otherChessPiece.SetPosition(Vector3.up * 0.15f + // for increasing y position because of the raised board edges
+                otherChessPiece.SetPosition(Vector3.up * 0.015f + // for increasing y position because of the raised board edges (set 0.15 for board scale 1)
                     new Vector3(-1 * tileSize, yOffset, 8 * tileSize)
                     - bounds //to set center of board
                     + new Vector3(tileSize / 2, 0, tileSize / 2) //center of square
+                    + transform.position
                     + (Vector3.back * deathSpacing) * deadBlacks.Count); //direction where it goes
             }
         }
@@ -313,33 +361,51 @@ public class Chessboard : MonoBehaviour
         }
 
         moveList.Add(new Vector2Int[] { previousPos, new Vector2Int(x, y) });
-        ProcessSpecialMove();
 
+        String team = currentPiece.team == 0 ? "w" : "b";
+        displayMove_Text.text = team + ": " + GenerateTileName(previousPos.x, previousPos.y) + " > " + GenerateTileName(x, y);
+        ProcessSpecialMove();
+        switch (CheckForCheckmate())
+        {
+            default:
+                break;
+            case 1:
+                Debug.Log("Checkmate");
+                CheckMate(currentPiece.team);
+                break;
+            case 2:
+                Debug.Log("Stalemate");
+                CheckMate(2);
+                break;
+        }
         return true;
     }
 
     private void ProcessSpecialMove()
     {
-        GameObject displayMove = turnScreen.transform.GetChild(2).gameObject;
+
         if (specialMove == SpecialMove.EnPassant)
         {
-            displayMove.SetActive(true);
-            TextMeshProUGUI textComponent = displayMove.GetComponent<TextMeshProUGUI>();
+            //displayMove.SetActive(true);
+            //TextMeshProUGUI textComponent = displayMove.GetComponent<TextMeshProUGUI>();
+
+            displaySpecialMove.SetActive(true);
 
             var newMove = moveList[moveList.Count - 1];
             ChessPiece myPawn = chessPieces[newMove[1].x, newMove[1].y];
             var targetPawnPos = moveList[moveList.Count - 2];
             ChessPiece enemyPawn = chessPieces[targetPawnPos[1].x, targetPawnPos[1].y];
-            textComponent.text = "EnPassant move at " + GenerateTileName(myPawn.currentX, myPawn.currentY) + " for pawn at " + GenerateTileName(enemyPawn.currentX, enemyPawn.currentY);
+
             if (myPawn.currentX == enemyPawn.currentX)
             {
                 if (myPawn.currentY == enemyPawn.currentY - 1 || myPawn.currentY == enemyPawn.currentY + 1)
                 {
                     if (enemyPawn.team == 0)
                     {
+                        displaySpecialMove_Text.text = "b: EnPassant by " + GenerateTileName(myPawn.currentX, myPawn.currentY) + " for " + GenerateTileName(enemyPawn.currentX, enemyPawn.currentY);
                         deadWhites.Add(enemyPawn);
                         enemyPawn.SetScale(Vector3.one * deathSize);
-                        enemyPawn.SetPosition(Vector3.up * 0.15f +
+                        enemyPawn.SetPosition(Vector3.up * 0.015f +
                             new Vector3(8 * tileSize, yOffset, -1 * tileSize)
                             - bounds
                             + new Vector3(tileSize / 2, 0, tileSize / 2)
@@ -347,9 +413,10 @@ public class Chessboard : MonoBehaviour
                     }
                     else
                     {
+                        displaySpecialMove_Text.text = "w: EnPassant by " + GenerateTileName(myPawn.currentX, myPawn.currentY) + " for " + GenerateTileName(enemyPawn.currentX, enemyPawn.currentY);
                         deadBlacks.Add(enemyPawn);
                         enemyPawn.SetScale(Vector3.one * deathSize);
-                        enemyPawn.SetPosition(Vector3.up * 0.15f + // for increasing y position because of the raised board edges
+                        enemyPawn.SetPosition(Vector3.up * 0.015f + // for increasing y position because of the raised board edges
                             new Vector3(-1 * tileSize, yOffset, 8 * tileSize)
                             - bounds //to set center of board
                             + new Vector3(tileSize / 2, 0, tileSize / 2) //center of square
@@ -358,8 +425,11 @@ public class Chessboard : MonoBehaviour
                     chessPieces[enemyPawn.currentX, enemyPawn.currentY] = null;
                 }
             }
-        } else if(specialMove == SpecialMove.Castling)
+        }
+        else if (specialMove == SpecialMove.Castling)
         {
+            displaySpecialMove.SetActive(true);
+
             Vector2Int[] lastMove = moveList[moveList.Count - 1];
 
             // left rook
@@ -372,7 +442,8 @@ public class Chessboard : MonoBehaviour
                     chessPieces[3, 0] = rook;
                     PositionSinglePiece(3, 0);
                     chessPieces[0, 0] = null;
-                } 
+                    displaySpecialMove_Text.text = "w: Left Castling";
+                }
                 // black side
                 else if (lastMove[1].y == 7)
                 {
@@ -380,8 +451,10 @@ public class Chessboard : MonoBehaviour
                     chessPieces[3, 7] = rook;
                     PositionSinglePiece(3, 7);
                     chessPieces[0, 7] = null;
+                    displaySpecialMove_Text.text = "b: Left Castling";
                 }
-            } else if (lastMove[1].x == 6)
+            }
+            else if (lastMove[1].x == 6)
             {
                 // white side
                 if (lastMove[1].y == 0)
@@ -390,6 +463,7 @@ public class Chessboard : MonoBehaviour
                     chessPieces[5, 0] = rook;
                     PositionSinglePiece(5, 0);
                     chessPieces[7, 0] = null;
+                    displaySpecialMove_Text.text = "w: Right Castling";
                 }
                 // black side
                 else if (lastMove[1].y == 7)
@@ -398,17 +472,23 @@ public class Chessboard : MonoBehaviour
                     chessPieces[5, 7] = rook;
                     PositionSinglePiece(5, 7);
                     chessPieces[7, 7] = null;
+                    displaySpecialMove_Text.text = "b: Right Castling";
                 }
             }
-        } else if(specialMove == SpecialMove.Promotion)
+        }
+        else if (specialMove == SpecialMove.Promotion)
         {
+            displaySpecialMove.SetActive(true);
+
             Vector2Int[] lastMove = moveList[moveList.Count - 1];
             ChessPiece targetPawn = chessPieces[lastMove[1].x, lastMove[1].y];
 
-            if(targetPawn.type == ChessPieceType.Pawn)
+            if (targetPawn.type == ChessPieceType.Pawn)
             {
-                if(targetPawn.team == 0 && lastMove[1].y == 7)
+                if (targetPawn.team == 0 && lastMove[1].y == 7)
                 {
+                    displaySpecialMove_Text.text = "w: " + GenerateTileName(targetPawn.currentX, targetPawn.currentY) + " promoted to Queen";
+
                     ChessPiece newQueen = SpawnSingleWhitePiece(ChessPieceType.Queen, 0);
                     newQueen.transform.position = chessPieces[lastMove[1].x, lastMove[1].y].transform.position;
                     Destroy(chessPieces[lastMove[1].x, lastMove[1].y].gameObject);
@@ -417,6 +497,8 @@ public class Chessboard : MonoBehaviour
                 }
                 if (targetPawn.team == 1 && lastMove[1].y == 0)
                 {
+                    displaySpecialMove_Text.text = "b: " + GenerateTileName(targetPawn.currentX, targetPawn.currentY) + " promoted to Queen";
+
                     ChessPiece newQueen = SpawnSingleBlackPiece(ChessPieceType.Queen, 1);
                     newQueen.transform.position = chessPieces[lastMove[1].x, lastMove[1].y].transform.position;
                     Destroy(chessPieces[lastMove[1].x, lastMove[1].y].gameObject);
@@ -427,29 +509,159 @@ public class Chessboard : MonoBehaviour
         }
         else
         {
-            displayMove.SetActive(false);
+            // displaySpecialMove.SetActive(false);
         }
     }
 
+    // check for checkmate before a move
     private void PreventCheck()
     {
         ChessPiece targetKing = null;
-        for(int x = 0; x<TILE_COUNT_X; x++)
-            for(int y = 0; y<TILE_COUNT_Y; y++)
-                if (chessPieces[x,y].type == ChessPieceType.King)
-                    if (chessPieces[x,y].team == currentlyDragging.team)
-                        targetKing = chessPieces[x,y];
-        // sending ref of available moves therefore deleting check moves
+        for (int x = 0; x < TILE_COUNT_X; x++)
+            for (int y = 0; y < TILE_COUNT_Y; y++)
+                if (chessPieces[x, y] != null)
+                    if (chessPieces[x, y].type == ChessPieceType.King)
+                        if (chessPieces[x, y].team == currentlyDragging.team)
+                            targetKing = chessPieces[x, y];
+        // sending ref of available moves to delete check moves
         SimulateMoveForSinglePiece(currentlyDragging, ref availableMoves, targetKing);
     }
 
     private void SimulateMoveForSinglePiece(ChessPiece cp, ref List<Vector2Int> moves, ChessPiece targetKing)
     {
         // Save the current values to reset after function call
+        int actualX = cp.currentX;
+        int actualY = cp.currentY;
+        List<Vector2Int> movesToRemove = new List<Vector2Int>();
 
         // Simulating and checking dangerous moves
+        for (int i = 0; i < moves.Count; i++)
+        {
+            int simX = moves[i].x;
+            int simY = moves[i].y;
+
+            Vector2Int kingPositionThisSim = new Vector2Int(targetKing.currentX, targetKing.currentY);
+            // if we simulate king's move
+            if (cp.type == ChessPieceType.King)
+                kingPositionThisSim = new Vector2Int(simX, simY);
+
+            // copy 2D array and not ref
+            ChessPiece[,] simulation = new ChessPiece[TILE_COUNT_X, TILE_COUNT_Y];
+            // list of chesspieces that can attack next round
+            List<ChessPiece> simulateAttackingPieces = new List<ChessPiece>();
+            for (int x = 0; x < TILE_COUNT_X; x++)
+            {
+                for (int y = 0; y < TILE_COUNT_Y; y++)
+                {
+                    if (chessPieces[x, y] != null)
+                    {
+                        simulation[x, y] = chessPieces[x, y];
+                        if (simulation[x, y].team != cp.team)
+                            simulateAttackingPieces.Add(simulation[x, y]);
+                    }
+                }
+            }
+
+            // simulate that move
+            simulation[actualX, actualY] = null;
+            cp.currentX = simX;
+            cp.currentY = simY;
+            simulation[simX, simY] = cp;
+
+            // did one of the piece got taken down during simulation
+            var deadPiece = simulateAttackingPieces.Find(chessPc => chessPc.currentX == simX && chessPc.currentY == simY);
+            if (deadPiece != null)
+                simulateAttackingPieces.Remove(deadPiece);
+            // Get all simulated attacking pieces move
+            List<Vector2Int> simMoves = new List<Vector2Int>();
+            for (int a = 0; a < simulateAttackingPieces.Count; a++)
+            {
+                var pieceMoves = simulateAttackingPieces[a].GetAvailableMoves(ref simulation, TILE_COUNT_X, TILE_COUNT_Y);
+                for (int b = 0; b < pieceMoves.Count; b++)
+                    simMoves.Add(pieceMoves[b]);
+            }
+
+            // remove move if king in trouble
+            if (ContainsValidMove(ref simMoves, kingPositionThisSim))
+                movesToRemove.Add(moves[i]);
+
+            // restore actual CP data
+            cp.currentX = actualX;
+            cp.currentY = actualY;
+        }
+
+        if (movesToRemove.Count > 0)
+        {
+            displaySpecialMove.SetActive(true);
+            displaySpecialMove_Text.text = "Check prevention active";
+        }
 
         // Remove check moves from current available move list
+        for (int i = 0; i < movesToRemove.Count; i++)
+            moves.Remove(movesToRemove[i]);
+    }
+
+    // checking for checkmate after a move 
+    private int CheckForCheckmate()
+    {
+        var lastMove = moveList[moveList.Count - 1];
+        int targetTeam = (chessPieces[lastMove[1].x, lastMove[1].y].team == 0) ? 1 : 0;
+
+        List<ChessPiece> attackingPieces = new List<ChessPiece>();
+        List<ChessPiece> defendingPieces = new List<ChessPiece>();
+        ChessPiece targetKing = null;
+        for (int x = 0; x < TILE_COUNT_X; x++)
+            for (int y = 0; y < TILE_COUNT_Y; y++)
+                if (chessPieces[x, y] != null)
+                {
+                    if (chessPieces[x, y].team == targetTeam)
+                    {
+                        defendingPieces.Add(chessPieces[x, y]);
+                        if (chessPieces[x, y].type == ChessPieceType.King)
+                            targetKing = chessPieces[x, y];
+                    }
+                    else
+                    {
+                        attackingPieces.Add(chessPieces[x, y]);
+                    }
+
+                }
+        // is the king attacked right now
+        List<Vector2Int> currentAvailableMoves = new List<Vector2Int>();
+        for (int i = 0; i < attackingPieces.Count; i++)
+        {
+            var pieceMoves = attackingPieces[i].GetAvailableMoves(ref chessPieces, TILE_COUNT_X, TILE_COUNT_Y);
+            for (int b = 0; b < pieceMoves.Count; b++)
+                currentAvailableMoves.Add(pieceMoves[b]);
+        }
+        // if we are in check right now. PLAY CHECKMATE SOUND HERE
+        if (ContainsValidMove(ref currentAvailableMoves, new Vector2Int(targetKing.currentX, targetKing.currentY)))
+        {
+            // king is under attack, can we move something to help king
+            for (int i = 0; i < defendingPieces.Count; i++)
+            {
+                // moves allowed to do
+                List<Vector2Int> defendingMoves = defendingPieces[i].GetAvailableMoves(ref chessPieces, TILE_COUNT_X, TILE_COUNT_Y);
+                SimulateMoveForSinglePiece(defendingPieces[i], ref defendingMoves, targetKing);
+                if (defendingMoves.Count != 0)
+                    return 0;
+            }
+            return 1; // checkmate exit
+        }
+        // to handle stalemate condition
+        else
+        {
+            // king is under attack, can we move something to help king
+            for (int i = 0; i < defendingPieces.Count; i++)
+            {
+                // moves allowed to do
+                List<Vector2Int> defendingMoves = defendingPieces[i].GetAvailableMoves(ref chessPieces, TILE_COUNT_X, TILE_COUNT_Y);
+                SimulateMoveForSinglePiece(defendingPieces[i], ref defendingMoves, targetKing);
+                if (defendingMoves.Count != 0)
+                    return 0;
+            }
+            return 2; // stalemate exit
+        }
     }
 
     private string GenerateTileName(int x, int y)
@@ -463,8 +675,8 @@ public class Chessboard : MonoBehaviour
     //generate board
     private void GenerateAllTiles(float tileSize, int tileCountX, int tileCountY)
     {
-        yOffset += transform.position.y;
-        bounds = new Vector3((tileCountX / 2) * tileSize, 0, (tileCountX / 2) * tileSize) + boardCenter;
+        yOffsetX += transform.position.y;
+        bounds = new Vector3((tileCountX / 2) * tileSize, 0, (tileCountX / 2) * tileSize) + boardCenter; // how far is extent of chessboard
 
         tiles = new GameObject[tileCountX, tileCountY];
         for (int i = 0; i < tileCountX; i++)
@@ -482,8 +694,10 @@ public class Chessboard : MonoBehaviour
         string tileName = string.Format("{0}{1}", column, row);
         GameObject tileObject = new GameObject(tileName);
 
-        //GameObject tileObject = new GameObject(string.Format("X:{0}, Y:{1}", x, y));
         tileObject.transform.parent = transform;
+
+        //tileObject.transform.localPosition = new Vector3(x * tileSize, yOffset, y * tileSize) - bounds + new Vector3(tileSize / 2, 0, tileSize / 2);
+        Debug.Log("YYYY Yoffset: " + yOffset + " bounds: " + bounds + " transform pos" + transform.position);
 
         //to render a triangle
         Mesh mesh = new Mesh();
@@ -491,10 +705,10 @@ public class Chessboard : MonoBehaviour
         tileObject.AddComponent<MeshRenderer>().material = tileMaterial;
 
         Vector3[] vertices = new Vector3[4];
-        vertices[0] = new Vector3(x * tileSize, yOffset, y * tileSize) - bounds;
-        vertices[1] = new Vector3(x * tileSize, yOffset, (y + 1) * tileSize) - bounds;
-        vertices[2] = new Vector3((x + 1) * tileSize, yOffset, y * tileSize) - bounds;
-        vertices[3] = new Vector3((x + 1) * tileSize, yOffset, (y + 1) * tileSize) - bounds;
+        vertices[0] = new Vector3(x * tileSize, yOffset, y * tileSize) - bounds + transform.position;
+        vertices[1] = new Vector3(x * tileSize, yOffset, (y + 1) * tileSize) - bounds + transform.position;
+        vertices[2] = new Vector3((x + 1) * tileSize, yOffset, y * tileSize) - bounds + transform.position;
+        vertices[3] = new Vector3((x + 1) * tileSize, yOffset, (y + 1) * tileSize) - bounds + transform.position;
 
         int[] triangle = new[] { 0, 1, 2, 1, 3, 2 };
 
@@ -506,6 +720,7 @@ public class Chessboard : MonoBehaviour
         tileObject.layer = LayerMask.NameToLayer("Tile");
         tileObject.AddComponent<MeshCollider>();
 
+        //Debug.Log("YYYYYYY Tile scale: " + tileObject.transform.localScale);
         return tileObject;
     }
 
@@ -580,9 +795,10 @@ public class Chessboard : MonoBehaviour
         //chessPieces[x,y].transform.position = GetTileCenter(x,y);
     }
 
+    // get center of tile where chesspiece is to be placed.
     private Vector3 GetTileCenter(int x, int y)
     {
-        return new Vector3(x * tileSize, yOffset, y * tileSize) - bounds + new Vector3(tileSize / 2, 0, tileSize / 2);
+        return new Vector3(x * tileSize, yOffset, y * tileSize) - bounds + new Vector3(tileSize / 2, 0, tileSize / 2) + transform.position;
     }
 
     // operations/ helper function
@@ -615,6 +831,7 @@ public class Chessboard : MonoBehaviour
 
     private void DisplayVictory(int winningTeam)
     {
+        turnScreen.SetActive(false);
         victoryScreen.SetActive(true);
         victoryScreen.transform.GetChild(winningTeam).gameObject.SetActive(true);
     }
@@ -623,7 +840,11 @@ public class Chessboard : MonoBehaviour
     {
         victoryScreen.transform.GetChild(0).gameObject.SetActive(false);
         victoryScreen.transform.GetChild(1).gameObject.SetActive(false);
+        victoryScreen.transform.GetChild(2).gameObject.SetActive(false);
         victoryScreen.SetActive(false);
+
+        displayMove_Text.text = " ";
+        displaySpecialMove_Text.text = " ";
 
         currentlyDragging = null;
         availableMoves.Clear();
@@ -655,10 +876,21 @@ public class Chessboard : MonoBehaviour
         PositionAllPieces();
 
         isWhiteTurn = true;
+        turnScreen.SetActive(true);
+        turnScreen.transform.GetChild(0).gameObject.SetActive(true);
+        turnScreen.transform.GetChild(1).gameObject.SetActive(false);
     }
 
     public void onExitButton()
     {
         Application.Quit();
+    }
+
+    public void onSurrender()
+    {
+        if (turnScreen.transform.GetChild(0).gameObject.activeSelf)
+            CheckMate(1);
+        else
+            CheckMate(0);
     }
 }
