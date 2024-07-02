@@ -181,4 +181,30 @@ public class BoardSpawnManager : MonoBehaviour
 
         return true;
     }
+
+    public void onARQueenPromotion()
+    {
+        chessboardScript.handlePawnPromotion(ChessPieceType.Queen);
+    }
+    public void onARBishopPromotion()
+    {
+        chessboardScript.handlePawnPromotion(ChessPieceType.Bishop);
+    }
+    public void onARRookPromotion()
+    {
+        chessboardScript.handlePawnPromotion(ChessPieceType.Rook);
+    }
+    public void onARKnightPromotion()
+    {
+        chessboardScript.handlePawnPromotion(ChessPieceType.Knight);
+    }
+
+    public void onAR_GameMode_PvP()
+    {
+        chessboardScript.setAutoOpponent(false);
+    }
+    public void onAR_GameMode_PvAlgo()
+    {
+        chessboardScript.setAutoOpponent(true);
+    }
 }

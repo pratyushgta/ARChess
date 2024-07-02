@@ -29,6 +29,8 @@ public class GameUIScript : MonoBehaviour
 
     private bool isAR;
 
+    private GameObject promotionMenu;
+
     public static GameUIScript Instance { set; get; }
 
     void Awake()
@@ -119,4 +121,50 @@ public class GameUIScript : MonoBehaviour
         */
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
+
+    public void onQueenPromotion()
+    {
+        if(isAR)
+            pm_script.onARQueenPromotion();
+        else
+            chessboardScript.handlePawnPromotion(ChessPieceType.Queen);
+    }
+    public void onBishopPromotion()
+    {
+        if (isAR)
+            pm_script.onARQueenPromotion();
+        else
+            chessboardScript.handlePawnPromotion(ChessPieceType.Bishop);
+    }
+    public void onRookPromotion()
+    {
+        if (isAR)
+            pm_script.onARQueenPromotion();
+        else
+            chessboardScript.handlePawnPromotion(ChessPieceType.Rook);
+    }
+    public void onKnightPromotion()
+    {
+        if (isAR)
+            pm_script.onARQueenPromotion();
+        else
+            chessboardScript.handlePawnPromotion(ChessPieceType.Knight);
+    }
+
+    public void onGameMode_PvP()
+    {
+        if (isAR)
+            pm_script.onAR_GameMode_PvP();
+        else
+            chessboardScript.setAutoOpponent(false);
+    }
+    public void onGameMode_PvAlgo()
+    {
+        if (isAR)
+            pm_script.onAR_GameMode_PvAlgo();
+        else
+            chessboardScript.setAutoOpponent(true);
+    }
+
+
 }
