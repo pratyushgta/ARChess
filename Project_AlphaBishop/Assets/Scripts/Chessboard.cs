@@ -14,6 +14,7 @@ using System.Collections;
 using UnityEngine.Timeline;
 using static Chessboard;
 using System.Security.Cryptography;
+using static UnityEngine.Rendering.DebugUI;
 //using CrossPlatformInput;
 
 public enum SpecialMove
@@ -91,10 +92,8 @@ public class Chessboard : MonoBehaviour
     private bool inputTimeOut = false;
 
     private GameObject GameModeMenu;
-    public bool AutoOpponent = false;
+    private bool AutoOpponent = false;
     //private Camera overheadCamera;
-
-
 
     private void Awake()
     {
@@ -146,6 +145,7 @@ public class Chessboard : MonoBehaviour
 
     private void Update()
     {
+        Debug.Log("U Input: " + inputTimeOut + " Auto: " + AutoOpponent);
         if (!currentCamera)
         {
             currentCamera = Camera.main;
@@ -157,6 +157,11 @@ public class Chessboard : MonoBehaviour
             return;
         }*/
 
+        if (victoryScreen.activeSelf || GameModeMenu.activeSelf)
+        {
+            inputTimeOut = true;
+            AutoOpponent = false;
+        }
 
         // handle mouse hover / check if there's at least one touch
         if (Input.touchCount > 0)
@@ -249,7 +254,7 @@ public class Chessboard : MonoBehaviour
                             // StartCoroutine(RandomMoveBlack());
                             //Calculate_BestBlackMove();
                             StartCoroutine(Calculate_BestBlackMove());
-                            
+
                         }
                     }
                     else
@@ -293,19 +298,6 @@ public class Chessboard : MonoBehaviour
                 }
             }
         }
-
-        /* if (!isWhiteTurn)
-          {
-              MakeAIMove();
-              //MakeBestMoveForBlack();
-              //isWhiteTurn = true;
-          }*/
-
-
-        /*if (!isWhiteTurn)
-        {
-            MoveBlackPiece();
-        }*/
     }
 
 
@@ -560,9 +552,42 @@ public class Chessboard : MonoBehaviour
         }
         else if (specialMove == SpecialMove.Promotion)
         {
-            promotionMenu.SetActive(true);
-            displaySpecialMove.SetActive(true);
-            inputTimeOut = true;
+            Debug.Log("SPECIAL ACTIVE");
+            Vector2Int[] lastMove = moveList[moveList.Count - 1];
+            ChessPiece targetPawn = chessPieces[lastMove[1].x, lastMove[1].y];
+            if (AutoOpponent && targetPawn.team == 1 && lastMove[1].y == 0)
+            {
+                Debug.Log("S1");
+                if (targetPawn.type == ChessPieceType.Pawn)
+                {
+                    Debug.Log("S2");
+                    List<ChessPieceType> blackPieces = new List<ChessPieceType>();
+                    blackPieces.Add(ChessPieceType.Queen);
+                    blackPieces.Add(ChessPieceType.Bishop);
+                    blackPieces.Add(ChessPieceType.Rook);
+                    blackPieces.Add(ChessPieceType.Knight);
+
+                    if (blackPieces.Count > 0)
+                    {
+                        Debug.Log("S3");
+                        Shuffle(blackPieces);
+                        handlePawnPromotion(blackPieces[0]);
+                    }
+                    else
+                    {
+                        Debug.Log("S4");
+                        handlePawnPromotion(ChessPieceType.Queen);
+                    }
+
+                }
+            }
+            else
+            {
+                Debug.Log("S5");
+                promotionMenu.SetActive(true);
+                displaySpecialMove.SetActive(true);
+                inputTimeOut = true;
+            }
             /*
             displaySpecialMove.SetActive(true);
 
@@ -760,6 +785,7 @@ public class Chessboard : MonoBehaviour
                 currentAvailableMoves.Add(pieceMoves[b]);
         }
         // if we are in check right now. PLAY CHECKMATE SOUND HERE
+        bool displayWin = false;
         try
         {
             if (ContainsValidMove(ref currentAvailableMoves, new Vector2Int(targetKing.currentX, targetKing.currentY)))
@@ -773,6 +799,7 @@ public class Chessboard : MonoBehaviour
                     if (defendingMoves.Count != 0)
                         return 0;
                 }
+                displayWin = true;
                 return 1; // checkmate exit
             }
             // to handle stalemate condition
@@ -787,13 +814,21 @@ public class Chessboard : MonoBehaviour
                     if (defendingMoves.Count != 0)
                         return 0;
                 }
+                displayWin = true;
                 return 2; // stalemate exit
             }
         }
         catch (Exception e)
         {
-            RemoveHighlightTiles();
-            return 0;
+            bool win0, win1, win2;
+            win0 = victoryScreen.transform.GetChild(0).gameObject.activeSelf;
+            win1 = victoryScreen.transform.GetChild(1).gameObject.activeSelf;
+            win2 = victoryScreen.transform.GetChild(2).gameObject.activeSelf;
+
+            if (win0 || win1 || win2)
+                return 0;
+            else
+                return 2;
         }
 
     }
@@ -960,14 +995,18 @@ public class Chessboard : MonoBehaviour
 
     private void CheckMate(int team)
     {
-        AutoOpponent = false;
+        Debug.Log("X INPUT: " + inputTimeOut);
+        Debug.Log("X AUTO: " + AutoOpponent);
         game_end_sound.Play();
         inputTimeOut = true;
+        AutoOpponent = false;
         DisplayVictory(team);
     }
 
     private void DisplayVictory(int winningTeam)
     {
+        Debug.Log("Y INPUT: " + inputTimeOut);
+        Debug.Log("Y AUTO: " + AutoOpponent);
         turnScreen.SetActive(false);
         victoryScreen.SetActive(true);
         victoryScreen.transform.GetChild(winningTeam).gameObject.SetActive(true);
@@ -976,7 +1015,6 @@ public class Chessboard : MonoBehaviour
     public void onResetButton()
     {
         game_start_sound.Play();
-     
         victoryScreen.transform.GetChild(0).gameObject.SetActive(false);
         victoryScreen.transform.GetChild(1).gameObject.SetActive(false);
         victoryScreen.transform.GetChild(2).gameObject.SetActive(false);
@@ -1046,7 +1084,7 @@ public class Chessboard : MonoBehaviour
     {
         GameModeMenu.SetActive(false);
         inputTimeOut = false;
-        AutoOpponent = value;    
+        AutoOpponent = value;
     }
 
     // fail-safe random move
@@ -1153,6 +1191,7 @@ public class Chessboard : MonoBehaviour
             foreach (var bestMove in bestMoves)
             {
                 availableMoves = bestMove.Item1.GetAvailableMoves(ref chessPieces, TILE_COUNT_X, TILE_COUNT_Y);
+                specialMove = bestMove.Item1.GetSpecialMoves(ref chessPieces, ref moveList, ref availableMoves);
                 if (ContainsValidMove(ref availableMoves, bestMove.Item2))
                 {
                     bool res = MoveTo(bestMove.Item1, bestMove.Item2.x, bestMove.Item2.y);
